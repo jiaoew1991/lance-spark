@@ -13,7 +13,6 @@
  */
 package com.lancedb.lance.spark.read;
 
-import com.lancedb.lance.spark.LanceConfig;
 import com.lancedb.lance.spark.LanceDataSource;
 import com.lancedb.lance.spark.TestUtils;
 
@@ -42,17 +41,13 @@ public abstract class BaseSparkConnectorReadTest {
         SparkSession.builder()
             .appName("spark-lance-connector-test")
             .master("local")
-            .config("spark.sql.catalog.lance", "com.lancedb.lance.spark.LanceCatalog")
             .getOrCreate();
     dbPath = TestUtils.TestTable1Config.dbPath;
     data =
         spark
             .read()
             .format(LanceDataSource.name)
-            .option(
-                LanceConfig.CONFIG_DATASET_URI,
-                TestUtils.getDatasetUri(dbPath, TestUtils.TestTable1Config.datasetName))
-            .load();
+            .load(TestUtils.getDatasetUri(dbPath, TestUtils.TestTable1Config.datasetName));
     data.createOrReplaceTempView("test_dataset1");
   }
 
@@ -184,5 +179,6 @@ public abstract class BaseSparkConnectorReadTest {
             .collectAsList();
     assertEquals(1, desc.size());
     assertTrue(desc.get(0).getString(0).contains("BroadcastHashJoin"));
+    assertEquals(92, df.count());
   }
 }

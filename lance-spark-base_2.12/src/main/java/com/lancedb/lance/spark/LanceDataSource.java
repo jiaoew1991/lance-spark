@@ -16,9 +16,8 @@ package com.lancedb.lance.spark;
 import com.lancedb.lance.spark.internal.LanceDatasetAdapter;
 import com.lancedb.lance.spark.utils.Optional;
 
-import org.apache.spark.sql.connector.catalog.Identifier;
-import org.apache.spark.sql.connector.catalog.SupportsCatalogOptions;
 import org.apache.spark.sql.connector.catalog.Table;
+import org.apache.spark.sql.connector.catalog.TableProvider;
 import org.apache.spark.sql.connector.expressions.Transform;
 import org.apache.spark.sql.sources.DataSourceRegister;
 import org.apache.spark.sql.types.StructType;
@@ -26,7 +25,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
 import java.util.Map;
 
-public abstract class LanceDataSource implements SupportsCatalogOptions, DataSourceRegister {
+public abstract class LanceDataSource implements TableProvider, DataSourceRegister {
   public static final String name = "lance";
 
   @Override
@@ -47,13 +46,8 @@ public abstract class LanceDataSource implements SupportsCatalogOptions, DataSou
   }
 
   @Override
-  public Identifier extractIdentifier(CaseInsensitiveStringMap options) {
-    return new LanceIdentifier(LanceConfig.from(options).getDatasetUri());
-  }
-
-  @Override
-  public String extractCatalog(CaseInsensitiveStringMap options) {
-    return "lance";
+  public boolean supportsExternalMetadata() {
+    return true;
   }
 
   public abstract LanceDataset createDataset(LanceConfig config, StructType sparkSchema);
