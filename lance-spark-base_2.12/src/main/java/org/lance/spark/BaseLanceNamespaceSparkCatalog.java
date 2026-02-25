@@ -432,8 +432,11 @@ public abstract class BaseLanceNamespaceSparkCatalog
     String location = describeResponse.getLocation();
     Map<String, String> initialStorageOptions = describeResponse.getStorageOptions();
 
-    // Open dataset to get schema
+    // Open dataset to get schema.
+    // Try namespace credential vending first; fall back to direct URI open
+    // (uses environment credentials like AWS_ACCESS_KEY_ID) if vending fails.
     StructType schema;
+    boolean useNamespace = true;
     try (Dataset dataset =
         Dataset.open()
             .allocator(LanceRuntime.allocator())
@@ -442,11 +445,17 @@ public abstract class BaseLanceNamespaceSparkCatalog
             .build()) {
       schema = LanceArrowUtils.fromArrowSchema(dataset.getSchema());
     } catch (IllegalArgumentException e) {
-      throw new NoSuchTableException(ident);
+      useNamespace = false;
+      try (Dataset dataset = Dataset.open(location, LanceRuntime.allocator())) {
+        schema = LanceArrowUtils.fromArrowSchema(dataset.getSchema());
+      } catch (IllegalArgumentException e2) {
+        throw new NoSuchTableException(ident);
+      }
     }
 
-    // Create read options with namespace support
-    LanceSparkReadOptions readOptions = createReadOptions(location, tableId);
+    // When namespace credential vending fails, use URI-based reads so
+    // downstream operations (splits, scans) use environment credentials.
+    LanceSparkReadOptions readOptions = createReadOptions(location, tableId, useNamespace);
     return createDataset(
         readOptions, schema, initialStorageOptions, namespaceImpl, namespaceProperties);
   }
@@ -458,13 +467,14 @@ public abstract class BaseLanceNamespaceSparkCatalog
    * @param tableId the table identifier within the namespace
    * @return a new LanceSparkReadOptions with all catalog settings
    */
-  private LanceSparkReadOptions createReadOptions(String location, List<String> tableId) {
-    return LanceSparkReadOptions.builder()
-        .datasetUri(location)
-        .withCatalogDefaults(catalogConfig)
-        .namespace(namespace)
-        .tableId(tableId)
-        .build();
+  private LanceSparkReadOptions createReadOptions(
+      String location, List<String> tableId, boolean useNamespace) {
+    LanceSparkReadOptions.Builder builder =
+        LanceSparkReadOptions.builder().datasetUri(location).withCatalogDefaults(catalogConfig);
+    if (useNamespace) {
+      builder.namespace(namespace).tableId(tableId);
+    }
+    return builder.build();
   }
 
   @Override
@@ -500,7 +510,7 @@ public abstract class BaseLanceNamespaceSparkCatalog
     Map<String, String> initialStorageOptions = describeResponse.getStorageOptions();
 
     // Create read options with namespace settings
-    LanceSparkReadOptions readOptions = createReadOptions(location, tableIdList);
+    LanceSparkReadOptions readOptions = createReadOptions(location, tableIdList, true);
     return createDataset(
         readOptions, processedSchema, initialStorageOptions, namespaceImpl, namespaceProperties);
   }
